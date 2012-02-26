@@ -1,0 +1,9 @@
+Spring 2012 Machine Learning Class Project
+Twitter Analysis for various purposes
+Currently:
+Sentiment analysis for stock prediction (Baseline [Bollen, 2010])
+
+Possible:
+Sentiment analysis for option straddling
+Sentiment analysis for box office predictions
+
