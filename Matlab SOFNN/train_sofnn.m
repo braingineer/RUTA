@@ -212,9 +212,12 @@ function [net error] = train_sofnn( data_x, data_y )
     
     % other params are taken from Bollen et al. (2010)'s paper.
     tolerance    =  .04; 
+    %tolerance    =  .12; 
     initialWidth =  .01;
+    %initialWidth =  4;
     k_sigma      = 1.12;
     k_d          = 0.01 * ones(numInputs,1);
+    %k_d          = [2;2];
     k_rmse       =  .05;
     
     % for the first example, the centers of the only EBF neuron are made to
@@ -275,8 +278,10 @@ function [net error] = train_sofnn( data_x, data_y )
         %fprintf('i:%f err:%f rmse:%f phi(n):%f #nu     :%f\n',i,error(i),rmse(i),max_phi,net.NumEBFNeurons);
        % disp(net.MemFunCenters);
         %disp(net.MemFunWidths);
-        plot(1:numExamples, error);
-       % plot(1:numExamples, rmse);
+        %plot(1:numExamples, error);
+       %plot(1:numExamples, rmse);
         %pause
     end
+    %disp(net.MemFunCenters);
+    %disp(net.MemFunWidths);
 end
