@@ -5,23 +5,25 @@ filepath="data/opinionfinder.lexicon.originalformat.tff"
 from nltk import word_tokenize
 
 def parseLexicon():
-    #testing
     fh = open(baseDir+filepath)
     d = dict()
     line = fh.readline()
+    x=0
     while (line):
+        x+=1
         [polarity, sent] = parseline(line)
-        #if (polarity!="positive" and polarity!="negative" and polarity!="neutral"):
-        #    print line
-        #    print word_tokenize(line)
         if polarity not in d:
             d[polarity] = set()
         d[polarity] |= set([sent])
         line = fh.readline()
 
-    print len(d)
-    for x in d:
-        print len(d[x]), x
+    
+    
+    #print len(d)
+    #for x in d:
+    #    print len(d[x]), x
+
+    return [d["positive"] | d["both"], (d["negative"] | d["weakneg"] | d["both"])]
     
 def parseline(line):
     x=todict(word_tokenize(line))
@@ -49,8 +51,17 @@ class sentiment:
     
     def __hash__(self):
         return hash(self.lemma)
+    
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return self.lemma==other
+        if other.lemma==self.lemma and other.pos==self.pos:
+            return True
+        return False
 
 
     
     
-parseLexicon()
+t = parseLexicon()
+print len(t[0])
+print len(t[1])
