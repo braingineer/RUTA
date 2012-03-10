@@ -170,7 +170,7 @@ Y = dir_of(1:tsize-1, end);
 testX = dir_of(tsize:end, 2:end-2);
 testY = dir_of(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = .1;
+gam = 1;
 sig2 = .8;
 
 % RUN AND TEST
@@ -180,6 +180,11 @@ Yp = simlssvm(model, X);
 disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
+figure;
+plot(1:size(X,1), Y,'b*');
+hold on;
+plot(1:size(X,1), Yp,'r.');
+ylim([-1 2]);
 %plotlssvm(model);
 
 Yp = simlssvm(model, testX);
@@ -203,7 +208,7 @@ Y = dir_of(1:tsize-1, end);
 testX = dir_of(tsize:end, 2:end-1);
 testY = dir_of(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = .1;
+gam = 1;
 sig2 = .8;
 
 % RUN AND TEST
@@ -213,6 +218,11 @@ Yp = simlssvm(model, X);
 disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
+figure;
+plot(1:size(X,1), Y,'b*');
+hold on;
+plot(1:size(X,1), Yp,'r.');
+ylim([-1 2]);
 %plotlssvm(model);
 
 Yp = simlssvm(model, testX);
@@ -236,7 +246,7 @@ Y = dir_ofpp(1:tsize-1, end);
 testX = dir_ofpp(tsize:end, 2:end-1);
 testY = dir_ofpp(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = .1;
+gam = 1;
 sig2 = .8;
 
 % RUN AND TEST
@@ -246,6 +256,11 @@ Yp = simlssvm(model, X);
 disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
+figure;
+plot(1:size(X,1), Y,'b*');
+hold on;
+plot(1:size(X,1), Yp,'r.');
+ylim([-1 2]);
 %plotlssvm(model);
 
 Yp = simlssvm(model, testX);
