@@ -52,7 +52,7 @@ class TweetThread(multiprocessing.Process):
         #for x in range(1000000):
             if line[0]=="T":
                 date = s(r(r(line, "T\t", ""), "\n", ""))[0]
-                fh()
+                fh() # user read here and discarded
                 line = fh()
                 tweet_str = r(r(line,"W\t",""),"\n","")
                 if search('http|www', tweet_str): continue

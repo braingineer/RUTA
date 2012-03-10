@@ -1,50 +1,58 @@
 %% PREPROCESS
 load DJIA_OF;
 
+% clean OF data
+OF = weed_of(OF, DJIA);
+OF_PP = weed_of(OF_PP, DJIA);
+
 % inverting OF sentiment ratio
 % OF(:,end) = 1./OF(:,end);
 % OF_PP(:,end) = 1./OF_PP(:,end);
 
-djia_of = append_of(DJIA, OF);
-djia_ofpp = append_of(DJIA, OF_PP);
+% smoothen sentiment ratios
+OF = smoothen_of(OF, size(OF,2), 7);
+OF_PP = smoothen_of(OF, size(OF_PP,2), 7);
 
-% smoothen sentiment ratios with a window size of 3
-djia_of = smoothen_of(djia_of, size(djia_of,2)-1, 3);
-djia_ofpp = smoothen_of(djia_ofpp, size(djia_ofpp,2)-1, 3);
+% generate model matrices
+i0  = get_baseline(DJIA);
+iOF = get_OFModel(DJIA, OF);
+iOF_PP = get_OFModel(DJIA, OF_PP);
 
-% scale features to be between [0, 1].  Bollen et al (2010) say that makes
+% scale features to be between [0, 1]. Bollen et al (2010) say that makes
 % every input be treated with similar importance.
-djia_of = scale(djia_of);
-djia_ofpp = scale(djia_ofpp);
-
-% randomize rows?
-% djia_of = djia_of(randperm(size(djia_of,1)), :);
-% djia_ofpp = djia_ofpp(randperm(size(djia_ofpp,1)), :);
+i0 = scale(i0);
+iOF = scale(iOF);
+iOF_PP = scale(iOF_PP);
 
 % size of training data
-%tsize = ceil(.9 * size(djia_of,1));
-tsize = 117;
+tsize = 117; % from visual inspection, corresponding to days preceding Dec
 
-dir_of = direction_data(djia_of, 4);
-dir_ofpp = direction_data(djia_ofpp, 4);
+dir_i0 = direction_data(i0, 4);
+dir_iOF = direction_data(iOF, 4);
+dir_iOF_PP = direction_data(iOF_PP, 4);
 
 %% VISUALIZING DATA
-
-startDate = datenum('2009-06-16');
+figure;
+startDate = datenum('2009-06-11');
 endDate   = datenum('2009-12-31');
-xData = linspace(startDate, endDate, 139);
+xData = linspace(startDate, endDate, 142);
 
-plot(xData, djia_of(:,6));
+scDJIA = scale(DJIA);
+scOF = scale(OF);
+scOF_PP = scale(OF_PP);
+
+plot(xData, scDJIA(:,2));
 ylim([-.5 2]);
 grid on;
 set(gca, 'XTick', xData);
 hold on;
-plot(xData, djia_of(:,5), 'r');
-plot(xData, djia_ofpp(:,5), 'g');
+
+plot(xData, scOF(:,4), 'r');
+plot(xData, scOF_PP(:,4), 'g');
 
 yL = get(gca, 'YLim');
 line([xData(1) xData(1)], yL, 'Color', 'k');
-text(xData(2), 1.25, '06/16/2009');
+text(xData(2), 1.25, '06/11/2009');
 
 line([xData(end) xData(end)], yL, 'Color', 'k');
 text(xData(end-9), 1.25, '12/31/2009');
@@ -53,6 +61,42 @@ text(xData(end-9), 1.25, '12/31/2009');
 datetick('x', 'mmm');
 legend('DJIA', 'OF (unproc)', 'OF (preproc)');
 
+%% SCALE AND SEE POSITIVE Vs. NEGATIVE SENTIMENT NUMBERS
+figure;
+subplot(1,2,1);
+startDate = datenum('2009-06-11');
+endDate   = datenum('2009-12-31');
+xData = linspace(startDate, endDate, 142);
+
+plot(xData, scOF(:,2));
+ylim([-.5 2]);
+grid on;
+set(gca, 'XTick', xData);
+hold on;
+plot(xData, scOF(:,3), 'r');
+
+%annotation('textarrow', [xData(1), xData(3)], [.9 .9], 'String', '06/16/2009');
+
+datetick('x', 'mmm');
+title('OF unprocessed');
+legend('positive', 'negative');
+
+subplot(1,2,2);
+startDate = datenum('2009-06-11');
+endDate   = datenum('2009-12-31');
+xData = linspace(startDate, endDate, 142);
+
+plot(xData, scOF_PP(:,2));
+ylim([-.5 2]);
+grid on;
+set(gca, 'XTick', xData);
+hold on;
+plot(xData, scOF_PP(:,3), 'r');
+%annotation('textarrow', [xData(1), xData(3)], [.9 .9], 'String', '06/16/2009');
+
+datetick('x', 'mmm');
+title('OF preprocessed');
+legend('positive', 'negative');
 
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -65,10 +109,10 @@ disp(' ');
 disp('DJIA Data only');
 % MAKE MODEL
 type = 'function estimation';
-X = djia_of(1:tsize-1, 2:end-2);
-Y = djia_of(1:tsize-1, end);
-testX = djia_of(tsize:end, 2:end-2);
-testY = djia_of(tsize:end, end);
+X = i0(1:tsize-1, 2:end-1);
+Y = i0(1:tsize-1, end);
+testX = i0(tsize:end, 2:end-1);
+testY = i0(tsize:end, end);
 kernel = 'RBF_kernel';
 gam = 5;
 sig2 = .8;
@@ -97,10 +141,10 @@ disp(' ');
 disp('DJIA Data with Unprocessed OF');
 % MAKE MODEL
 type = 'function estimation';
-X = djia_of(1:tsize-1, 2:end-1);
-Y = djia_of(1:tsize-1, end);
-testX = djia_of(tsize:end, 2:end-1);
-testY = djia_of(tsize:end, end);
+X = iOF(1:tsize-1, 2:end-1);
+Y = iOF(1:tsize-1, end);
+testX = iOF(tsize:end, 2:end-1);
+testY = iOF(tsize:end, end);
 kernel = 'RBF_kernel';
 gam = 5;
 sig2 = .8;
@@ -129,10 +173,10 @@ disp(' ');
 disp('DJIA Data with Pre-Processed OF');
 % MAKE MODEL
 type = 'function estimation';
-X = djia_ofpp(1:tsize-1, 2:end-1);
-Y = djia_ofpp(1:tsize-1, end);
-testX = djia_ofpp(tsize:end, 2:end-1);
-testY = djia_ofpp(tsize:end, end);
+X = iOF_PP(1:tsize-1, 2:end-1);
+Y = iOF_PP(1:tsize-1, end);
+testX = iOF_PP(tsize:end, 2:end-1);
+testY = iOF_PP(tsize:end, end);
 kernel = 'RBF_kernel';
 gam = 5;
 sig2 = .8;
@@ -165,12 +209,12 @@ disp(' ');
 disp('Direction testing w/ DJIA Data only');
 
 type = 'classification';
-X = dir_of(1:tsize-1, 2:end-2);
-Y = dir_of(1:tsize-1, end);
-testX = dir_of(tsize:end, 2:end-2);
-testY = dir_of(tsize:end, end);
+X = dir_i0(1:tsize-1, 2:end-1);
+Y = dir_i0(1:tsize-1, end);
+testX = dir_i0(tsize:end, 2:end-1);
+testY = dir_i0(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = 1;
+gam = 10;
 sig2 = .8;
 
 % RUN AND TEST
@@ -181,6 +225,7 @@ disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
 figure;
+subplot(1,2,1);
 plot(1:size(X,1), Y,'b*');
 hold on;
 plot(1:size(X,1), Yp,'r.');
@@ -191,7 +236,7 @@ Yp = simlssvm(model, testX);
 disp(' ');
 disp('Testing data...');
 fprintf('Accuracy: %f\n', sum(Yp == testY)/size(Yp,1));
-figure;
+subplot(1,2,2);
 plot(1:size(testX,1), testY,'b*');
 hold on;
 plot(1:size(testX,1), Yp,'r.');
@@ -203,12 +248,12 @@ disp(' ');
 disp('Direction testing w/ DJIA & unprocessed OF data');
 
 type = 'classification';
-X = dir_of(1:tsize-1, 2:end-1);
-Y = dir_of(1:tsize-1, end);
-testX = dir_of(tsize:end, 2:end-1);
-testY = dir_of(tsize:end, end);
+X = dir_iOF(1:tsize-1, 2:end-1);
+Y = dir_iOF(1:tsize-1, end);
+testX = dir_iOF(tsize:end, 2:end-1);
+testY = dir_iOF(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = 1;
+gam = 10;
 sig2 = .8;
 
 % RUN AND TEST
@@ -219,6 +264,7 @@ disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
 figure;
+subplot(1,2,1);
 plot(1:size(X,1), Y,'b*');
 hold on;
 plot(1:size(X,1), Yp,'r.');
@@ -229,7 +275,7 @@ Yp = simlssvm(model, testX);
 disp(' ');
 disp('Testing data...');
 fprintf('Accuracy: %f\n', sum(Yp == testY)/size(Yp,1));
-figure;
+subplot(1,2,2);
 plot(1:size(testX,1), testY,'b*');
 hold on;
 plot(1:size(testX,1), Yp,'r.');
@@ -241,12 +287,12 @@ disp(' ');
 disp('Direction testing w/ DJIA & pre-processed OF data');
 
 type = 'classification';
-X = dir_ofpp(1:tsize-1, 2:end-1);
-Y = dir_ofpp(1:tsize-1, end);
-testX = dir_ofpp(tsize:end, 2:end-1);
-testY = dir_ofpp(tsize:end, end);
+X = dir_iOF_PP(1:tsize-1, 2:end-1);
+Y = dir_iOF_PP(1:tsize-1, end);
+testX = dir_iOF_PP(tsize:end, 2:end-1);
+testY = dir_iOF_PP(tsize:end, end);
 kernel = 'RBF_kernel';
-gam = 1;
+gam = 10;
 sig2 = .8;
 
 % RUN AND TEST
@@ -257,6 +303,7 @@ disp(' ');
 disp('Training data...');
 fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
 figure;
+subplot(1,2,1);
 plot(1:size(X,1), Y,'b*');
 hold on;
 plot(1:size(X,1), Yp,'r.');
@@ -267,7 +314,7 @@ Yp = simlssvm(model, testX);
 disp(' ');
 disp('Testing data...');
 fprintf('Accuracy: %f\n', sum(Yp == testY)/size(Yp,1));
-figure;
+subplot(1,2,2);
 plot(1:size(testX,1), testY,'b*');
 hold on;
 plot(1:size(testX,1), Yp,'r.');

@@ -1,15 +1,15 @@
-function data = smoothen_of( data, col, win )
+function ofmat = smoothen_of( ofmat, col, win )
 %SMOOTHEN_OF smoothens sentiment ratios by moving window averaging
-%   data = matrix with one column containing sentiment ratios
+%   ofmat = matrix with one column containing sentiment ratios
 %   col  = index of the column containing sentiment ratios
 %   win  = size of window for computing moving average
 
-    for i = win:size(data,1)
+    for i = win:size(ofmat,1)
         sum = 0;
         for j = i-win+1:i
-            sum = sum + data(j,col);
+            sum = sum + ofmat(j,col);
         end
-        data(i,col) = sum / win;
+        ofmat(i,col) = sum / win;
     end
 end
 
