@@ -24,8 +24,12 @@ lexicon = None
 finishedQ =  multiprocessing.Queue(100000)
 tweetQ = multiprocessing.Queue(100000)
 sentinelQ = multiprocessing.Queue(7)
-POS = "positive"
-NEG = "negative"
+SPOS = "strongsubj-positive"
+SNEG = "strongsubj-negative"
+SNEU = "strongsubj-neutral"
+WPOS = "weaksubj-positive"
+WNEG = "weaksubj-negative"
+WNEU = "weaksubj-neutral"
 
 
 twitterFiles = ["tweets2009-06.txt","tweets2009-07.txt","tweets2009-08.txt","tweets2009-09.txt","tweets2009-10.txt","tweets2009-11.txt","tweets2009-12.txt"]
@@ -33,41 +37,58 @@ twitterFilepath = "/media/Media/tweets/bigdata/"
 
             
 class TweetThread(multiprocessing.Process):
-    def __init__(self, fileHandler):
+    def __init__(self, fileHandler, fp):
         multiprocessing.Process.__init__(self)
         self.fileHandler = fileHandler
+        self.fp = fp
 
     
     def run(self):
-        global sentinelQ, lexicon, POS, NEG
+        global sentinelQ, lexicon, WPOS, WNEG, SPOS, SNEG, SNEU, PNEU
+        #op = open("/home/brian/TwitterSpring2012/RUTA/data/%s.testview" % self.fp, 'a')
         search = re.search
         r = string.replace
         s = string.split
+        lc = string.lower
         fh = self.fileHandler.readline
         line = fh()
-        pos = lexicon[POS]
-        neg = lexicon[NEG]
+        wpos = lexicon[WPOS]
+        wneg = lexicon[WNEG]
+        wneu = lexicon[WNEU]
+        spos = lexicon[SPOS]
+        sneg = lexicon[SNEG]
+        sneu = lexicon[SNEU]
         print line
         while line:
-        #for x in range(1000000):
+        #for x in range(100000):
             if line[0]=="T":
+                retter=False
                 date = s(r(r(line, "T\t", ""), "\n", ""))[0]
                 fh()
                 line = fh()
                 tweet_str = r(r(line,"W\t",""),"\n","")
                 if search('http|www', tweet_str): continue
-                pcP=0
-                pcN=0
+                numPos=[0,0]
+                numNeg=[0,0]
+                numNeu=[0,0]
                 #print tweet_str
                 for w in regexp_tokenize(tweet_str, pattern='\w+|\$[\d\.]+\S+'):
-                    if w in pos:
-                        pcP+=1
-                    if w in neg:
-                        pcN+=1
-                finishedQ.put([date, pcP, pcN], 1)
+                    w=lc(w)
+                    if w in spos: numPos[0]+=1; retter=True
+                    elif w in wpos: numPos[1]+=1; retter=True
+                    elif w in sneg: numNeg[0]+=1; retter=True
+                    elif w in wneg: numNeg[1]+=1; retter=True
+                    elif w in sneu: numNeu[0]+=1; retter=True
+                    elif w in wneu: numNeu[1]+=1; retter=True
+                if retter:
+                    #op.write("Tweet\n%s\nSentiment: %s, %s\n\n" % (tweet_str, pcP, pcN))
+                    finishedQ.put([date, [numPos, numNeg, numNeu]], 1)
             line = fh()
+        #op.close()
+        print("This file is done: %s" % self.fp)
         self.fileHandler.close()
         sentinelQ.put("DONE")
+        print "SentinelQ: %s, finishedQ: %s" % (sentinelQ.qsize(), finishedQ.qsize())
         
 
 
@@ -97,92 +118,15 @@ class SimpleProgress:
         
 class Sentiment:
     def __init__(self):   
-        global lexicon
+        global lexicon, WPOS, WNEG, SPOS, SNEG, SNEU, WNEU
         ofl = OFLexicon()
         l=ofl.parseLexicon()
-        self.POS = "positive"
-        self.NEG = "negative"
-        lexicon = {self.POS:l[0], self.NEG:l[1]}
-        self.dayCounts = {}
+        lexicon = {SPOS:l[0], WPOS:l[1], SNEG:l[2], WNEG:l[3], SNEU:l[4], WNEU:l[5]}
+        self.castedDayCounts = {True: {}, False: {}}
+        self.uncastedDayCounts = {True: {}, False: {}}
+        self.castedNeutralCounts = {True: {}, False: {}}
+        self.uncastedNeutralCounts = {True: {}, False: {}}
     
-    
-    def perfRun(self):
-        global lexicon, POS, NEG
-        r=[]
-        x=0
-        membershipTester = set()
-        prog = SimpleProgress(476553560)
-        fileHandler = open("%s%s" % (twitterFilepath, twitterFiles[0]))
-        r = string.replace
-        s = string.split
-        fh = fileHandler.readline
-        line = fh()
-        pos = lexicon[POS]
-        neg = lexicon[NEG]
-        print line
-        #while line:
-        for x in range(1000000):
-            if line[0]=="T":
-                date = s(r(r(line, "T\t", ""), "\n", ""))[0]
-                fh()
-                tweet_str = r(r(fh(),"W\t",""),"\n","")
-                pcP=0
-                pcN=0
-                #print tweet_str
-                for w in word_tokenize(tweet_str):
-                    if w in pos:
-                        pcP+=1
-                    if w in neg:
-                        pcN+=1
-        
-                if date not in membershipTester:
-                    membershipTester |= set([date])    
-                    self.dayCounts[date] = [0,0]
-                self.dayCounts[date][0]+=pcP
-                self.dayCounts[date][1]+=pcN  
-                if x%50000==0:
-                    print prog.update(x)
-                    print "days seen: %s" % len(membershipTester)
-            line = fh()
-    
-    def word_tokenizeTesting(self):
-        fileHandler = open("%s%s" % (twitterFilepath, twitterFiles[0]))
-        r = string.replace
-        s = string.split
-        fh = fileHandler.readline
-        line = fh()
-        print line
-        #while line:
-        for x in range(1000):
-            if line[0]=="T":
-                date = s(r(r(line, "T\t", ""), "\n", ""))[0]
-                fh()
-                tweet_str = r(r(fh(),"W\t",""),"\n","")
-                word_tokenize(tweet_str)
-            line = fh()
-            
-    def regexp_tokenizeTesting(self):
-        fileHandler = open("%s%s" % (twitterFilepath, twitterFiles[0]))
-        r = string.replace
-        s = string.split
-        fh = fileHandler.readline
-        line = fh()
-        print line
-        #while line:
-        for x in range(1000):
-            if line[0]=="T":
-                date = s(r(r(line, "T\t", ""), "\n", ""))[0]
-                fh()
-                tweet_str = r(r(fh(),"W\t",""),"\n","")
-                regexp_tokenize(tweet_str, pattern='\w+|\$[\d\.]+\S+')
-            line = fh()
-    
-    def tester(self):
-        import timeit
-        print "Word Tokenize:"
-        print "%s" % timeit(self.word_tokenizeTesting())
-        print "RegExp Tokenize:"
-        print "%s" % timeit(self.regexp_tokenizeTesting())
     
     def run(self):
         global finishedQ, sentinelQ, tweetQ
@@ -193,7 +137,7 @@ class Sentiment:
         for f in twitterFiles:
             print "Starting file %s" % f        
             fileHandler = open("%s%s" % (twitterFilepath, f))
-            tweetThread = TweetThread(fileHandler)
+            tweetThread = TweetThread(fileHandler, f)
             tweetThread.start()
             r.append(tweetThread)
             
@@ -202,17 +146,153 @@ class Sentiment:
 
         while (not sentinelQ.full()) or (not finishedQ.empty()):
             x+=1
-            [day, pos, neg] = finishedQ.get(1)
-            if day not in membershipTester:
-                membershipTester |= set([day])    
-                self.dayCounts[day] = [0,0]
-            self.dayCounts[day][0]+=pos
-            self.dayCounts[day][1]+=neg  
+            try:
+                [day, [[spos, wpos], [sneg, wneg], [sneu, wneu]]] = finishedQ.get(1, 5)
+                if day not in membershipTester:
+                    membershipTester |= set([day])    
+                    self.castedDayCounts[True][day]=[0,0] # cast and weighted
+                    self.castedDayCounts[False][day]=[0,0] # cast and not weighted
+                    self.uncastedDayCounts[True][day]=[0,0] # uncast and weighted
+                    self.uncastedDayCounts[False][day]=[0,0] # uncast and not weighted
+                    self.castedNeutralCounts[True][day]=[0,0,0] # same pattern as above
+                    self.castedNeutralCounts[False][day]=[0,0,0]
+                    self.uncastedNeutralCounts[True][day]=[0,0,0]
+                    self.uncastedNeutralCounts[False][day]=[0,0,0]
+                #weighted and uncast
+                self.uncastedDayCounts[True][day][0]+=spos+wpos*0.5
+                self.uncastedDayCounts[True][day][1]+=sneg+wneg*0.5
+                self.uncastedNeutralCounts[True][day][0]+=spos+wpos*0.5
+                self.uncastedNeutralCounts[True][day][1]+=sneg+wneg*0.5
+                self.uncastedNeutralCounts[True][day][2]+=sneu+wneu*0.5
+                #not weighted and uncast
+                self.uncastedDayCounts[False][day][0]+=spos+wpos
+                self.uncastedDayCounts[False][day][1]+=sneg+wneg
+                self.uncastedNeutralCounts[False][day][0]+=spos+wpos
+                self.uncastedNeutralCounts[False][day][1]+=sneg+wneg
+                self.uncastedNeutralCounts[False][day][2]+=sneu+wneu
+                
+                #cases for cast and weighted
+                if spos+wpos*0.5>=sneg+wneg*0.5:
+                    self.castedDayCounts[True][day][0]+=1 #weighted, cast
+                    if spos+wpos*0.5>=sneu+wneu*0.5: #cases for ternary, weighted, cast
+                        self.castedNeutralCounts[True][day][0]+=1
+                    else:
+                        self.castedNeutralCounts[True][day][2]+=1
+                else:
+                    self.castedDayCounts[True][day][1]+=1 #weighted, cast
+                    if sneg+wneg*0.5>=sneu+wneu*0.5: #caes for ternary, weighted, cast
+                        self.castedNeutralCounts[True][day][1]+=1
+                    else:
+                        self.castedNeutralCounts[True][day][2]+=1
+                
+                #cases for unweighted and cast
+                if spos+wpos>=sneg+wneg:
+                    self.castedDayCounts[False][day][0]+=1 # unweighted, cast
+                    if sneg+wneg>=sneu+wneu: #cases for ternary
+                        self.castedNeutralCounts[False][day][1]+=1
+                    else:
+                        self.castedNeutralCounts[False][day][2]+=1
+                else:
+                    self.castedDayCounts[False][day][1]+=1 #unweighted, cast
+                    if spos+wpos>=sneu+wneu: #cases for ternary
+                        self.castedNeutralCounts[False][day][0]+=1
+                    else:
+                        self.castedNeutralCounts[False][day][2]+=1
+
+
+            
+            
+            except:
+                print "Catching Exception"
             if x%50000==0:
                 print prog.update(x)
                 #print "at %s" % x
                 print "finishedQ: %s" % finishedQ.qsize()
                 print "sentinelQ: %s\n\n-----\n" % sentinelQ.qsize()
+                    
+            
+        print "Done with all threads, printing results to a file"
+        extensions = ["cast.weighted.noneutral", "cast.notweighted.nonetural", "cast.weighted.withneutral", "cast.notweighted.withneutral", "notcast.weighted.noneutral", "notcast.notweighted.nonetural", "notcast.weighted.withneutral", "notcast.notweighted.withneutral"]
+        filepath = "/home/brian/TwitterSpring2012/RUTA/data/OFLexicon.results."
+        fh=[]
+        for r in extensions:
+            fh.append(open("%s%s" % (filepath, r), 'w'))
+        sortedKeys = self.castedDayCounts[True].keys()
+        sortedKeys.sort()
+        for day in sortedKeys:
+            #r = "%s,%s,%s\n" % (day, self.dayCounts[day][0], self.dayCounts[day][1])
+            #cast, no neutral, weighted
+            fh[0].write("%s,%s,%s\n" % (day, self.castedDayCounts[True][day][0], self.castedDayCounts[True][day][1]))
+            #cast, no neutral, not weighted
+            fh[1].write("%s,%s,%s\n" % (day, self.castedDayCounts[False][day][0], self.castedDayCounts[False][day][1]))
+            #cast, neutral, weighted
+            fh[2].write("%s,%s,%s,%s\n" % (day, self.castedNeutralCounts[True][day][0], self.castedNeutralCounts[True][day][1],self.castedNeutralCounts[True][day][2]))
+            #cast, neutral, not weighted
+            fh[3].write("%s,%s,%s,%s\n" % (day, self.castedNeutralCounts[False][day][0], self.castedNeutralCounts[False][day][1],self.castedNeutralCounts[False][day][2]))
+            #not cast, no neutral, weighted
+            fh[4].write("%s,%s,%s\n" % (day, self.uncastedDayCounts[True][day][0], self.uncastedDayCounts[True][day][1]))
+            #not cast, no neutral, not weighted
+            fh[5].write("%s,%s,%s\n" % (day, self.uncastedDayCounts[False][day][0], self.uncastedDayCounts[False][day][1]))
+            #not cast, neutral, weighted
+            fh[6].write("%s,%s,%s,%s\n" % (day, self.uncastedNeutralCounts[True][day][0], self.uncastedNeutralCounts[True][day][1],self.uncastedNeutralCounts[True][day][2]))
+            #not cast, neutral, not weighted
+            fh[7].write("%s,%s,%s,%s\n" % (day, self.uncastedNeutralCounts[False][day][0], self.uncastedNeutralCounts[False][day][1],self.uncastedNeutralCounts[False][day][2]))
+            #fh.write(r)
+        for handler in fh:
+            handler.close()
+
+#        for day in self.castedDayCounts[True]:
+#            print "Day: %s" % day
+#            print "Cast, Weighted: %s, ratio: %s\n" % (self.castedDayCounts[True][day], self.castedDayCounts[True][day][0]*1.0/(1+self.castedDayCounts[True][day][1]))
+#            print "Cast, not weighted: %s, ratio: %s\n" % (self.castedDayCounts[False][day], self.castedDayCounts[False][day][0]*1.0/(1+self.castedDayCounts[False][day][1]))
+#            print "Cast, With Neutral, Weighted: %s, ratio: %s\n" % (self.castedNeutralCounts[True][day], self.castedNeutralCounts[True][day][0]*1.0/(1+self.castedNeutralCounts[True][day][1]))
+#            print "Cast, with neutral, no weighted: %s, ratio: %s\n" % (self.castedNeutralCounts[False][day], self.castedNeutralCounts[False][day][0]*1.0/(1+self.castedNeutralCounts[False][day][1]))
+#            print "uncast, weighted: %s, ratio: %s\n" % (self.uncastedDayCounts[True][day], self.uncastedDayCounts[True][day][0]*1.0/(1+self.uncastedDayCounts[True][day][1]))
+#            print "uncast, not weighted: %s, ratio: %s\n" % (self.uncastedDayCounts[False][day], self.uncastedDayCounts[False][day][0]*1.0/(1+self.uncastedDayCounts[False][day][1]))
+#            print "uncast, with neutral, weighted: %s, ratio: %s\n" % (self.uncastedNeutralCounts[True][day], self.uncastedNeutralCounts[True][day][0]*1.0/(1+self.uncastedNeutralCounts[True][day][1]))
+#            print "uncast, with neutral, not weighted: %s, ratio: %s\n" % (self.uncastedNeutralCounts[False][day], self.uncastedNeutralCounts[False][day][0]*1.0/(1+self.uncastedNeutralCounts[False][day][1]))
+#            print "\n\n"
+        print "Finito"
+    
+    def oldrun(self):
+        global finishedQ, sentinelQ, tweetQ
+        r=[]
+        x=0
+        membershipTester = set()
+        prog = SimpleProgress(476553560)
+        for f in twitterFiles:
+            print "Starting file %s" % f        
+            fileHandler = open("%s%s" % (twitterFilepath, f))
+            tweetThread = TweetThread(fileHandler, f)
+            tweetThread.start()
+            r.append(tweetThread)
+            
+        prog.start()
+            
+
+        while (not sentinelQ.full()) or (not finishedQ.empty()):
+            x+=1
+            try:
+                [day, sent, pos, neg] = finishedQ.get(1, 5)
+                if day not in membershipTester:
+                    membershipTester |= set([day])    
+                    self.dayCounts[day] = [0,0]
+                    self.otherDayCounts[day]= [0, 0]
+                self.otherDayCounts[day][0]+=pos
+                self.otherDayCounts[day][1]+=neg
+                if sent:
+                    self.dayCounts[day][0]+=1
+                else:
+                    self.dayCounts[day][1]+=1
+            except:
+                for day in self.dayCounts:
+                    print day, self.dayCounts[day], self.dayCounts[day][0]*1.0/self.dayCounts[day][1]
+                    print day, self.otherDayCounts[day], self.otherDayCounts[day][0]*1.0/self.otherDayCounts[day][1]
+#            if x%50000==0:
+#                print prog.update(x)
+#                #print "at %s" % x
+#                print "finishedQ: %s" % finishedQ.qsize()
+#                print "sentinelQ: %s\n\n-----\n" % sentinelQ.qsize()
                     
             
         print "Done with all threads, printing results to a file"
@@ -225,6 +305,14 @@ class Sentiment:
             print r
             fh.write(r)
         fh.close()
+
+        for day in self.dayCounts:
+            r=self.dayCounts[day][0]*1.0/self.dayCounts[day][1]
+            s = self.otherDayCounts[day][0]*1.0/self.otherDayCounts[day][1]
+            print day, self.dayCounts[day]
+            print day, self.otherDayCounts[day]
+            print r/s
+            print
         print "Finito"
         
 
@@ -247,11 +335,11 @@ class OFLexicon:
             d[polarity] |= set([sent])
             line = fh.readline()
     
-        return [d["positive"] | d["both"], (d["negative"] | d["weakneg"] | d["both"])]
+        return [d["strongsubj-positive"], d["weaksubj-positive"], d["strongsubj-negative"], d["weaksubj-negative"], d["strongsubj-neutral"], d["weaksubj-neutral"]]
         
     def parseline(self, line):
         x=self.todict(word_tokenize(line))
-        return [x["priorpolarity"], sentiment(x["word1"], x["type"], x["pos1"], x["priorpolarity"])]
+        return ["%s-%s" % (x['type'], x["priorpolarity"]), sentiment(x["word1"], x["type"], x["pos1"], x["priorpolarity"])]
         
     def todict(self, tokens):
         d=dict()
@@ -284,5 +372,5 @@ class sentiment:
         return False
 
 
-#S=Sentiment()
-#S.run()
+S=Sentiment()
+S.run()
