@@ -1,6 +1,7 @@
 function m = mape( A, F )
 %MAPE Mean Absolute Percentage Error
-%   Detailed explanation goes here -- Later!
+%   A = Prediction
+%   F = Real value
     
     m = 0;
     for i=1:size(A, 1)
