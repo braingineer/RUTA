@@ -1,0 +1,45 @@
+Model Params
+============
+Regression: 
+	Gamma = 2;  Sigma = .8
+
+Classification:
+	Gamma = 2;  Sigma =  .8;
+
+Results:
+========	
+Baseline:
+	Regression: 	MAPE = 6.19%;  SMAPE = 2.97%;
+	Classification: Accuracy = 38.78%
+	
+OF -- cast X no weights X no neutrals:
+	Regression:		MAPE = 25.94%; SMAPE = 9.23%;
+	Classification: Accuracy = 65.22%
+
+OF -- cast X weights X no neutrals:
+	Regression:		MAPE = 30.03%; SMAPE = 10.70%;
+	Classification: Accuracy = 60.87%
+
+OF -- no cast X no weights X no neutrals:
+	Regression:		MAPE = 31.92%; SMAPE = 11.09%;
+	Classification: Accuracy = 69.57%
+
+OF -- no cast X weights X no neutrals:
+	Regression:		MAPE = 44.95%; SMAPE = 15.74%;
+	Classification: Accuracy = 65.22%
+	
+OF -- cast X no weights X neutrals:
+	Regression:		MAPE = 26.43%; SMAPE = 8.84%;
+	Classification: Accuracy = 52.17%
+
+OF -- cast X weights X neutrals:
+	Regression:		MAPE = 32.29%; SMAPE = 11.23%;
+	Classification: Accuracy = 56.52%
+
+OF -- no cast X no weights X neutrals:
+	Regression:		MAPE = 31.92%; SMAPE = 11.09%;
+	Classification: Accuracy = 69.57%
+
+OF -- no cast X weights X neutrals:
+	Regression:		MAPE = 44.95%; SMAPE = 15.74%;
+	Classification: Accuracy = 65.22%
