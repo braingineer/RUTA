@@ -36,14 +36,43 @@ twitterFiles = ["tweets2009-06.txt","tweets2009-07.txt","tweets2009-08.txt","twe
 twitterFilepath = "/media/Media/tweets/bigdata/"
 
             
-class TweetThread(multiprocessing.Process):
+class TweetProcess(multiprocessing.Process):
     def __init__(self, fileHandler, fp):
         multiprocessing.Process.__init__(self)
         self.fileHandler = fileHandler
         self.fp = fp
-
+        self.ret="Not a set yet"
     
     def run(self):
+        #self.eightconditionrun()
+        self.userCountRun()
+        
+    def userCountRun(self):
+        r = string.replace
+        fh = self.fileHandler.readline
+        
+        lc = string.lower
+        search = re.search
+        s = string.split
+        line = fh()
+        userDict=set()
+        print line
+        #while line:
+        for x in range(10000000):
+            if line[0]=="T":
+                date = s(r(r(line, "T\t", ""), "\n", ""))[0]
+                user=r(r(fh(), "U\thttp://twitter.com/",""), "\n", "")
+                tweet_str = lc(r(r(line,"W\t",""),"\n",""))
+                if search('RT', tweet_str):
+                    print user, tweet_str
+            line=fh()
+        self.ret = userDict
+        
+    def getUsers(self):
+        print self.ret
+        return self.ret
+            
+    def eightconditionrun(self):
         global sentinelQ, lexicon, WPOS, WNEG, SPOS, SNEG, SNEU, PNEU
         #op = open("/home/brian/TwitterSpring2012/RUTA/data/%s.testview" % self.fp, 'a')
         search = re.search
@@ -129,6 +158,28 @@ class Sentiment:
     
     
     def run(self):
+        #self.eightconditionrun()
+        self.userCountRun()
+    
+    def userCountRun(self):
+        users=set()
+        processes=collections.deque()
+        finished=[]
+        for f in twitterFiles:
+            #print "Starting file %s" % f        
+            fileHandler = open("%s%s" % (twitterFilepath, f))
+            tweetThread = TweetProcess(fileHandler, f)
+            tweetThread.start()
+            processes.append(tweetThread)
+        while len(processes)>0:
+            p=processes.popleft()
+            if p.is_alive():
+                processes.append(p)
+            else:
+                print "Finishing a thread"
+        
+    
+    def eightconditionrun(self):
         global finishedQ, sentinelQ, tweetQ
         r=[]
         x=0
@@ -137,7 +188,7 @@ class Sentiment:
         for f in twitterFiles:
             print "Starting file %s" % f        
             fileHandler = open("%s%s" % (twitterFilepath, f))
-            tweetThread = TweetThread(fileHandler, f)
+            tweetThread = TweetProcess(fileHandler, f)
             tweetThread.start()
             r.append(tweetThread)
             
@@ -188,14 +239,14 @@ class Sentiment:
                 #cases for unweighted and cast
                 if spos+wpos>=sneg+wneg:
                     self.castedDayCounts[False][day][0]+=1 # unweighted, cast
-                    if sneg+wneg>=sneu+wneu: #cases for ternary
-                        self.castedNeutralCounts[False][day][1]+=1
+                    if spos+wpos>=sneu+wneu: #cases for ternary
+                        self.castedNeutralCounts[False][day][0]+=1
                     else:
                         self.castedNeutralCounts[False][day][2]+=1
                 else:
                     self.castedDayCounts[False][day][1]+=1 #unweighted, cast
-                    if spos+wpos>=sneu+wneu: #cases for ternary
-                        self.castedNeutralCounts[False][day][0]+=1
+                    if sneg+wneg>=sneu+wneu: #cases for ternary
+                        self.castedNeutralCounts[False][day][1]+=1
                     else:
                         self.castedNeutralCounts[False][day][2]+=1
 
@@ -263,7 +314,7 @@ class Sentiment:
         for f in twitterFiles:
             print "Starting file %s" % f        
             fileHandler = open("%s%s" % (twitterFilepath, f))
-            tweetThread = TweetThread(fileHandler, f)
+            tweetThread = TweetProcess(fileHandler, f)
             tweetThread.start()
             r.append(tweetThread)
             
