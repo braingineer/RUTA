@@ -19,22 +19,23 @@ from operator import itemgetter
 #from Queue import Queue
 import multiprocessing
 from Queue import Empty
-from time import time
+from time import time, ctime
 import string
 import commands
 from nltk import regexp_tokenize
+import MySQLdb as mysql
 
 finishedQ =  multiprocessing.Queue(100000)
 sentinelQ = multiprocessing.Queue(7)
 fileQ = multiprocessing.Queue(214)
 
 
-corpusDictFile = open("/home/brian/TwitterSpring2012/RUTA/data/allWords.final", 'r')
+corpusDictFile = open("/home/brian/TwitterSpring2012/RUTA/data/top15k.final", 'r')
 corpusDictionary = []
 fl = corpusDictFile.readline
 line = fl() #purposely starting from one in the dict.. the first line of the file is a summary line
 while line:
-    corpusDictionary.append(string.replace(line, "\n", ""))
+    corpusDictionary.append(string.split(string.replace(line, "\n", ""), ',')[0])
     line = fl()
 corpusDictFile.close()
 corpusSet = set(corpusDictionary)
@@ -60,6 +61,29 @@ class TweetProcess(multiprocessing.Process):
         #self.preprocessCorpus()
         #self.singleDayProcessing()
         self.singleDayToWordNumbers()
+        #self.fullCorpusWordDict()
+        #self.fullCorpusGoodWords()
+
+    def fullCorpusGoodWords(self):
+        paths = self.filePaths
+        s = string.split
+        r = string.replace
+        while len(paths)>0:
+            someFilePath = paths.pop()
+            #print "Starting %s" % someFilePath
+            handler = open(someFilePath, 'r')
+            fh = handler.readline
+            localtotal = fh()
+            line = fh()
+            localWords = dict()
+            while line:
+                linesplit = s(r(line, "\n", ""), ',')
+                localWords[linesplit[0]]=[eval(linesplit[1]), eval(linesplit[2])]
+                line = fh()
+            finishedQ.put(localWords,1)
+            #print "Just finished %s" % someFilePath
+        sentinelQ.put("DONE")
+        print "SentinelQ: %s, finishedQ: %s" % (sentinelQ.qsize(), finishedQ.qsize())
 
     def singleDayToWordNumbers(self):
         global finishedQ, sentinelQ, corpusSet, corpusDict
@@ -73,51 +97,140 @@ class TweetProcess(multiprocessing.Process):
         #.take the top 1000
         #.output to a file AND report back the set so we can merge
         while len(paths)>0:
+            someFilePath = paths.pop()
+            print "Starting %s" % someFilePath
+            handler = open(someFilePath, 'r')
+            writehandler = open("%s.converted" % someFilePath, 'w')
+            fh = handler.readline
+            wh = writehandler.write
+            line = fh()
+            totalDocs = 0
+            reducedDocs = 0
+            words = {}
+            wordsSet = set()
+            while line:
+                if line[0]=="T":
+                    totalDocs+=1
+                    user = fh()
+                    thisDoc = set()
+                    thisDocFinal = dict()
+                    tweet_str = lc(r(r(fh(),"W",""),"\n",""))
+                    for w in regexp_tokenize(tweet_str, pattern='\w+|\$[\d\.]+\S+'):
+                        if w in corpusSet:
+                            if w not in thisDoc:
+                                thisDocFinal[corpusDict[w]]=0
+                                thisDoc |= set([w])
+                            thisDocFinal[corpusDict[w]]+=1
+                    if len(thisDocFinal)>0:   
+                        reducedDocs+=1
+                        outputter = "%s" % len(thisDocFinal)
+                        for w in thisDocFinal:
+                            outputter+=" %s:%s" % (w, thisDocFinal[w])
+                        outputter+="\n"
+                        wh(outputter)
+                    
+                line = fh()
+            filestats = open("%s.stats" % someFilePath, 'w')
+            filestats.write("totalDocs,%s" % reducedDocs)
+            filestats.close()        
+            handler.close()
+            writehandler.close()
+            finishedQ.put("dummy", 1)
+            print "Just finished %s" % someFilePath               
+        sentinelQ.put("DONE")
+        print "SentinelQ: %s, finishedQ: %s" % (sentinelQ.qsize(), finishedQ.qsize())
+
+
+    def fullCorpusWordDict(self):
+        global finishedQ, sentinelQ, stopwords
+        paths = self.filePaths
+        stopwordSet = set(stopwords)
+        r = string.replace
+        search = re.search
+        s = string.split
+        lc = string.lower
+        log = math.log
+        #.count the frequency of each word
+        #.weight each frequency by its idf (inverse doc frequency.  log(totalDocs/#DocsWordAppears)
+        #.take the top 1000
+        #.output to a file AND report back the set so we can merge
+        while len(paths)>0:
             try:
                 someFilePath = paths.pop()
                 print "Starting %s" % someFilePath
                 handler = open(someFilePath, 'r')
-                writehandler = open("%s.converted" % someFilePath, 'w')
                 fh = handler.readline
-                wh = writehandler.write
                 line = fh()
                 totalDocs = 0
-                reducedDocs = 0
                 words = {}
                 wordsSet = set()
                 while line:
+                #for x in range(1000):
                     if line[0]=="T":
                         totalDocs+=1
                         user = fh()
                         thisDoc = set()
-                        thisDocFinal = dict()
                         tweet_str = lc(r(r(fh(),"W",""),"\n",""))
                         for w in regexp_tokenize(tweet_str, pattern='\w+|\$[\d\.]+\S+'):
-                            if w in corpusSet:
-                                if w not in thisDoc:
-                                    thisDocFinal[corpusDict[w]]=0
-                                    thisDoc |= set([w])
-                                thisDocFinal[corpusDict[w]]+=1
-                        if len(thisDocFinal)>0:   
-                            reducedDocs+=1
-                            outputter = "%s" % len(thisDocFinal)
-                            for w in thisDocFinal:
-                                outputter+=" %s:%s" % (w, thisDocFinal[w])
-                            outputter+="\n"
-                            wh(outputter)
-                        
+                            if w in stopwordSet or search('[^a-z]', w):
+                                continue
+                            if w not in wordsSet:
+                                words[w] = [0,0]
+                                wordsSet |= set([w])
+                            if w not in thisDoc:
+                                thisDoc |= set([w])
+                                words[w][1]+=1 #number of documents it appears in
+                            words[w][0]+=1 #total frequency in which it appears
+                        #if totalDocs%10000==0:
+                        #    print "Seen %s docs for %s" % (totalDocs,someFilePath)
+                        #read in words
+                        #parse out dictionary and counts
+                        #we want to calculate the tf*idf for each word term
                     line = fh()
-                filestats = open("%s.stats" % someFilePath, 'w')
-                filestats.write("totalDocs,%s" % reducedDocs)
-                filestats.close()        
                 handler.close()
-                writehandler.close()
-                finishedQ.put("dummy", 1)
-                print "Just finished %s" % someFilePath               
+                
+                #making the variables explicit
+                #words holds a word as the initial indexer.. so words.iterkeys gives usthe words, iteritems gives us all in the shape of a tuple
+                #so if we get iteritems, first tuple entry is the world, second is a 2-size array
+                #the first number is frequency in this collection
+                #the second number is the unique docs it was in (so if it appeared 1 time per any doc it was in, they are the same number)
+                #what we want to do is pass back
+                #problem I am foreseeing.. calculating the tf*idf.  if we pull out a chunk to calculate, how are we going to put it back in?
+                #i suppose we could have a middle man, aka a file.. I just don't know if we can edit and pull from a table at the same time. 
+                #so for now, we will assume we are going to pull from mysql, divide the proper things, output to a file, then read back from the file, and stor ein mysql
+                #then we can order by the tf*idf column
+                
+                #finishedQ.put([words, totalDocs], 1)
+                print "Just finished %s" % someFilePath
+                
+#                for w in words:
+#                    words[w] = words[w][0]*log(totalDocs*1.0/words[w][1])
+#                topWords = sorted(words.iteritems(), key=itemgetter(1), reverse=True)
+#                if len(topWords)>1000:
+#                    topWords=topWords[:1000]
+#                else:
+#                    topWords=topWords[:len(topWords)*7/10]
+                outputDefGoodWords = open("%s.goodWords" % someFilePath, 'w')
+                outputMaybeGoodWords = open("%s.maybeWords" % someFilePath, 'w')
+                outputDefGoodWords.write("totalTweets,%s\n" % totalDocs)
+                for word in words:
+                    if words[word][0]>=10:
+                        outputDefGoodWords.write("%s,%s,%s\n" % (word, words[word][0], words[word][1]))
+                    else:
+                        outputMaybeGoodWords.write("%s,%s,%s\n" % (word, words[word][0], words[word][1]))
+                    
+                outputDefGoodWords.close()
+                outputMaybeGoodWords.close()
+                
+#                topWords=None
+                finishedQ.put("dummyVal", 1)
+#                print "Just finished %s" % someFilePath
+#                
+            
             except Empty:
                 print "Tweet process seeing empty fileQ"
         sentinelQ.put("DONE")
-        print "SentinelQ: %s, finishedQ: %s, fileQ: %s" % (sentinelQ.qsize(), finishedQ.qsize(), fileQ.qsize())
+        print "SentinelQ: %s, finishedQ: %s" % (sentinelQ.qsize(), finishedQ.qsize())
 
     
     def singleDayProcessing(self):
@@ -156,8 +269,8 @@ class TweetProcess(multiprocessing.Process):
                                 wordsSet |= set([w])
                             if w not in thisDoc:
                                 thisDoc |= set([w])
-                                words[w][1]+=1
-                            words[w][0]+=1
+                                words[w][1]+=1 #number of documents it appears in
+                            words[w][0]+=1 #total frequency in which it appears
                         if totalDocs%10000==0:
                             print "Seen %s docs for %s" % (totalDocs,someFilePath)
                         #read in words
@@ -278,6 +391,152 @@ class CorpusManip:
         #self.singleDayProcessing()
         #self.IMessedUpProcessing()
         self.convertingDaysProcessing()
+        #self.fullCorpusWordDicts()
+        #self.fullCorpusGoodWordTFIDF()
+        
+    def fullCorpusGoodWordTFIDF(self):
+        global finishedQ, sentinelQ, stopwords
+        allfh = self.getAllGoodWordFileHandlers()
+        tweetProcesses=[]
+        prog = SimpleProgress(214)
+        x=0
+        totalDocs=0
+        w = worker()
+        fh = [allfh[:35], allfh[35:65], allfh[65:95], allfh[95:125], allfh[125:155], allfh[155:185], allfh[185:]]
+        
+        allWordDict = dict()
+        allWordSet = set()
+        
+        for f in range(7):
+            tweetProcess = TweetProcess(fh[f])
+            tweetProcess.start()
+            tweetProcesses.append(tweetProcess)
+        prog.start()
+        #attempt one is memory
+        while not sentinelQ.full() or not finishedQ.empty():
+            try:
+                words = finishedQ.get(1,5)
+                x+=1
+                #inserter = "insert into corpusCounter(word, frequency, uniquedocs) values"
+                for word in words:
+                    values = words[word]
+                    if word not in allWordSet:
+                        allWordSet |= set([word])
+                        allWordDict[word] = [0,0]
+                    allWordDict[word][0]+=values[0]
+                    allWordDict[word][1]+=values[1]
+                print "We have %s words now" % len(allWordDict)
+                
+                    #inserter+="(%s,%s, %s),"
+                #inserter="%s ON DUPLICATE KEY UPDATE frequency=frequency+values(frequency), uniquedocs=uniquedocs+values(uniquedocs)" % inserter[:-1]
+                print prog.update(x)
+            except Empty:
+                print "Catching empty exception, it's chill"
+        
+        allwords = open("/home/brian/TwitterSpring2012/RUTA/data/top15k.final", 'w')
+        restofwords = open("/home/brian/TwitterSpring2012/RUTA/data/lastk.final", 'w')
+        for word in allWordDict:
+            values = allWordDict[word]
+            tfidf = 1.0*values[0]*math.log(476553560./(1.0*values[1]))
+            allWordDict[word] = tfidf
+        topWords = sorted(allWordDict.iteritems(), key=itemgetter(1), reverse=True)
+        top = topWords[:15001]
+        bottom = topWords[15001:]
+        for word in top:
+            allwords.write("%s,%s\n" % (word[0], word[1]))
+        for word in bottom:
+            restofwords.write("%s,%s\n" % (word[0], word[1]))
+        allwords.close()
+        restofwords.close()
+        print "Finito"
+        
+    def fullCorpusWordDicts(self):
+        """
+        What needs to happen here:
+            we need to compute the counts of words for each day
+            we also need to know the number of tweets per day
+            what we will be computing is the TFIDF per word per document (tweet)
+            we also need to know the total number of tweets for LDA parameters
+            
+        This is the new run through
+        So what we are doing is going through, getting the minibatch counts (unique and total frequency) for all words
+        we will insert these minibatch words into the mysql table (auto form the insert)
+        then after all the files are done, we will grab these one line at a time, calc the tf*idf, then output it to a file
+        then we will read in the tf*idfs and put it back into the mysql table
+        
+        *note, the only reason I do this is because I am not sure nor feel like research what the implications of pulling from a mysql table and updating it at the same time are
+        
+        
+            
+        """
+        global finishedQ, sentinelQ, stopwords
+        allfh = self.getAllFileHandlers()
+        tweetProcesses=[]
+        prog = SimpleProgress(214)
+        x=0
+        totalDocs=0
+        w = worker()
+        fh = [allfh[:35], allfh[35:65], allfh[65:95], allfh[95:125], allfh[125:155], allfh[155:185], allfh[185:]]
+            
+        for f in range(7):
+            tweetProcess = TweetProcess(fh[f])
+            tweetProcess.start()
+            tweetProcesses.append(tweetProcess)
+        prog.start()
+
+        while not sentinelQ.full() or not finishedQ.empty():
+            try:
+                dummyVar = finishedQ.get(1,5)
+                #print "got the file"
+                x+=1
+#                totalDocs+=localTotalDocs
+#                stock = "insert into corpusCounter(word, frequency, uniquedocs) values"
+                
+                #hit maxbyte for the mysql connection. going to split at 650k and then insert in seperate pushes
+                #vars for this process
+#                wordsKeys = words.keys()
+#                wordsValues = words.values()
+#                if len(words)>650000:
+#                    wordKeysArray=[wordsKeys[:650000], wordsKeys[650000:]]
+#                    wordValuesArray = [wordsValues[:650000], wordsValues[650000:]]
+#                else:
+#                    wordKeysArray = [wordsKeys]
+#                    wordValuesArray = [wordsValues]
+#                #print "%s %s %s %s" % (len(wordsKeys), len(wordsValues), len(wordKeysArray), len(wordValuesArray))    
+#                    
+#                for y in range(len(wordKeysArray)):
+#                    inserter = stock
+#                    #print "%s" % range(len(wordKeysArray[y]))
+#                    for z in range(len(wordKeysArray[y])):
+#                        #print "z %s" % z
+#                        word = wordKeysArray[y][z]
+#                        values = wordValuesArray[y][z]
+#                        local = "('%s',%s,%s)," % (word, values[0], values[1])
+#                        inserter+=local
+#                    #print "inserter %s" % inserter
+#                    inserter="%s%s" % (inserter[:-1], ';')
+#                    w.insertAndCommit(inserter)
+#                    
+                    
+                print prog.update(x)
+#                print "Words seen and pushed from file: %s" % len(words)
+#                print "totalDocs in this file: %s" % localTotalDocs
+#                print "docs seen so far: %s" % totalDocs
+                
+#                words = finishedQ.get(1, 5)
+#                x+=1
+#                finalWords |= words
+#                print "---------\nFiles Seen: %s\nFinal Word Size: %s" % (x, len(finalWords))
+            except Empty:
+                print "Catching empty exception, it's chill"
+#        finalOutput = open("/home/brian/TwitterSpring2012/RUTA/data/allWords.final", 'w')
+#        finalOutput.write("Total Words,%s" % len(finalWords))
+#        for word in finalWords:
+#            finalOutput.write(word)
+#        finalOutput.close()
+        print "Finito"
+#        print "Total docs seen %s" % totalDocs
+        
         
     def IMessedUpProcessing(self):
         #I didn't put a carriage return in the final output of the words
@@ -310,7 +569,11 @@ class CorpusManip:
         tweetProcesses=[]
         prog = SimpleProgress(214)
         x=0
-        fh = [allfh[:35], allfh[35:65], allfh[65:95], allfh[95:125], allfh[125:155], allfh[155:185], allfh[185:]]
+        fh=[[],[],[],[],[],[],[]]
+        #fh = [allfh[:35], allfh[35:65], allfh[65:95], allfh[95:125], allfh[125:155], allfh[155:185], allfh[185:]]
+        for f in range(len(allfh)):
+            fh[f%7].append(allfh[f])
+        print fh
             
         for f in range(7):
             tweetProcess = TweetProcess(fh[f])
@@ -324,7 +587,7 @@ class CorpusManip:
                 x+=1
                 print prog.update(x)
             except Empty:
-                print "Catching empty exception, it's chill"
+                print "Waiting for queue to have an item... %s" % ctime()
         print "Finito"
         
         
@@ -536,6 +799,7 @@ class CorpusManip:
                     allfilehandlers.append(f)
         return allfilehandlers
 
+
     def getAllWordFiles(self):
         global fileQ
         path = "/media/OS/twitterdata"
@@ -547,6 +811,22 @@ class CorpusManip:
                 days = commands.getoutput("ls %s/%s" % (path, m)).split("\n")
                 for day in days:
                     if re.search("words", day):
+                        f = "%s/%s/%s" % (path, m, day)
+                        print f
+                        allfilehandlers.append(f)
+        return allfilehandlers
+    
+    def getAllGoodWordFileHandlers(self):
+        global fileQ
+        path = "/media/OS/twitterdata"
+        
+        months = commands.getoutput("ls %s" % path).split("\n")[:-1]
+        allfilehandlers=[]
+        
+        for m in months:
+                days = commands.getoutput("ls %s/%s" % (path, m)).split("\n")
+                for day in days:
+                    if re.search("goodWords", day):
                         f = "%s/%s/%s" % (path, m, day)
                         print f
                         allfilehandlers.append(f)
@@ -578,11 +858,36 @@ class SimpleProgress:
         return "[%s%s]" % ('|'*done, ':'*left)
   
 
+class worker:
+        def __init__(self):
+                self.db = mysql.connect("localhost", "ruta", "ruta", "rutadb")
+                self.dbc = self.db.cursor()
+
+        def insertAndCommit(self, query):
+                self.dbc.execute(query)
+                
+
+        def select(self, query):
+                #returns the number of items found      
+                return self.dbc.execute(query)
+
+        def fetchall(self):
+                return self.dbc.fetchall()
+
+        def fetchone(self):
+                return self.dbc.fetchone()
+
+
 stopwords=['a', 'about', 'above', 'across', 'after', 'again', 'against', 'all', 'almost', 'alone', 'along', 'already', 'also', 'although', 'always', 'among', 'an', 'and', 'another', 'any', 'anybody', 'anyone', 'anything', 'anywhere', 'are', 'area', 'areas', 'around', 'as', 'ask', 'asked', 'asking', 'asks', 'at', 'away', 'b', 'back', 'backed', 'backing', 'backs', 'be', 'became', 'because', 'become', 'becomes', 'been', 'before', 'began', 'behind', 'being', 'beings', 'best', 'better', 'between', 'big', 'both', 'but', 'by', 'c', 'came', 'can', 'cannot', 'case', 'cases', 'certain', 'certainly', 'clear', 'clearly', 'come', 'could', 'd', 'did', 'differ', 'different', 'differently', 'do', 'does', 'done', 'down', 'down', 'downed', 'downing', 'downs', 'during', 'e', 'each', 'early', 'either', 'end', 'ended', 'ending', 'ends', 'enough', 'even', 'evenly', 'ever', 'every', 'everybody', 'everyone', 'everything', 'everywhere', 'f', 'face', 'faces', 'fact', 'facts', 'far', 'felt', 'few', 'find', 'finds', 'first', 'for', 'four', 'from', 'full', 'fully', 'further', 'furthered', 'furthering', 'furthers', 'g', 'gave', 'general', 'generally', 'get', 'gets', 'give', 'given', 'gives', 'go', 'going', 'good', 'goods', 'got', 'great', 'greater', 'greatest', 'group', 'grouped', 'grouping', 'groups', 'h', 'had', 'has', 'have', 'having', 'he', 'her', 'here', 'herself', 'high', 'high', 'high', 'higher', 'highest', 'him', 'himself', 'his', 'how', 'however', 'i', 'if', 'important', 'in', 'interest', 'interested', 'interesting', 'interests', 'into', 'is', 'it', 'its', 'itself', 'j', 'just', 'k', 'keep', 'keeps', 'kind', 'knew', 'know', 'known', 'knows', 'l', 'large', 'largely', 'last', 'later', 'latest', 'least', 'less', 'let', 'lets', 'like', 'likely', 'long', 'longer', 'longest', 'm', 'made', 'make', 'making', 'man', 'many', 'may', 'me', 'member', 'members', 'men', 'might', 'more', 'most', 'mostly', 'mr', 'mrs', 'much', 'must', 'my', 'myself', 'n', 'necessary', 'need', 'needed', 'needing', 'needs', 'never', 'new', 'new', 'newer', 'newest', 'next', 'no', 'nobody', 'non', 'noone', 'not', 'nothing', 'now', 'nowhere', 'number', 'numbers', 'o', 'of', 'off', 'often', 'old', 'older', 'oldest', 'on', 'once', 'one', 'only', 'open', 'opened', 'opening', 'opens', 'or', 'order', 'ordered', 'ordering', 'orders', 'other', 'others', 'our', 'out', 'over', 'p', 'part', 'parted', 'parting', 'parts', 'per', 'perhaps', 'place', 'places', 'point', 'pointed', 'pointing', 'points', 'possible', 'present', 'presented', 'presenting', 'presents', 'problem', 'problems', 'put', 'puts', 'q', 'quite', 'r', 'rather', 'really', 'right', 'right', 'room', 'rooms', 's', 'said', 'same', 'saw', 'say', 'says', 'second', 'seconds', 'see', 'seem', 'seemed', 'seeming', 'seems', 'sees', 'several', 'shall', 'she', 'should', 'show', 'showed', 'showing', 'shows', 'side', 'sides', 'since', 'small', 'smaller', 'smallest', 'so', 'some', 'somebody', 'someone', 'something', 'somewhere', 'state', 'states', 'still', 'still', 'such', 'sure', 't', 'take', 'taken', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'therefore', 'these', 'they', 'thing', 'things', 'think', 'thinks', 'this', 'those', 'though', 'thought', 'thoughts', 'three', 'through', 'thus', 'to', 'today', 'together', 'too', 'took', 'toward', 'turn', 'turned', 'turning', 'turns', 'two', 'u', 'under', 'until', 'up', 'upon', 'us', 'use', 'used', 'uses', 'v', 'very', 'w', 'want', 'wanted', 'wanting', 'wants', 'was', 'way', 'ways', 'we', 'well', 'wells', 'went', 'were', 'what', 'when', 'where', 'whether', 'which', 'while', 'who', 'whole', 'whose', 'why', 'will', 'with', 'within', 'without', 'work', 'worked', 'working', 'works', 'would', 'x', 'y', 'year', 'years', 'yet', 'you', 'young', 'younger', 'youngest', 'your', 'yours', 'z']
 
+def main(): 
+    C = CorpusManip()
+    C.run()
+
+
+if __name__ == '__main__':
+    main()
   
-C = CorpusManip()
-C.run()
 
 
 
