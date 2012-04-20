@@ -1,0 +1,12 @@
+fh = open("~/TwitterSpring2012/RUTA/data/corpus.userstats.rtonly", 'r')
+line = fh.readline()
+lowest = 0
+total = 0
+totaltweets=0
+allUsers = 
+while line:
+	if total<20000:
+		total+=1
+		user = line.split(",")
+		numTweets = eval(user[1])
+		if 	
