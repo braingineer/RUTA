@@ -7,7 +7,7 @@ Written by Brian McMahan, Feb 26, 2012
 """
 
 from nltk.corpus import wordnet as wn
-
+import string
 
 #assumes input is an array with 2 entries, each an array of words of opposite sentiment
 #these seed words are vitally important.
@@ -22,10 +22,10 @@ def propagate(S, iter):
             #the error is stupid. it's not real. ignore it. eclipse is dumb. comment logged at 5:30 am. =)
             Sn[i] |= set(wn.synsets(S[i][j], wn.ADJ)) #@UndefinedVariable is stupid
         T[i].append(Sn[i])
-    #print "Original set:"
-    #for i in Sn:
-        #for w in i:
-            #print w
+    print "Original set:"
+    for i in Sn:
+        for w in i:
+            print w
 
     return _recurprop(T, iter, 0)
     
@@ -67,10 +67,12 @@ def moodCalc(mood):
     pos = T[0]
     neg = T[1]
     #print "Positive"
-    posSet=set()
+    posSet={}
     sizes=[0, 0]
+    x=0
     for epoch in pos:
-        posSet |= epoch
+        posSet[x]= epoch
+        x+=1
         #print "Round %s" % pos.index(epoch)
         #print "Length of set: %s" % len(epoch)
         sizes[0]+=len(epoch)
@@ -79,6 +81,7 @@ def moodCalc(mood):
         
     #print "\n\nNegative"
     negSet = set()
+    x=0
     for epoch in neg:
         negSet |= epoch
         #print "Round %s" % neg.index(epoch)
@@ -101,34 +104,40 @@ class mood:
         self.wordVector = wordVector
         self.recurDepth = recurDepth
         self.name = name
+
+
+def stripParse(T):
+    ret=[]
+    information = {}
+    for depth in T:
+        information[depth] = []
+        depthSet = T[depth]
+        for syn in depthSet:
+            v = string.split(string.replace(syn.name,"_", " "), ".")[0]
+            if v not in ret:
+                ret.append(v)
+                information[depth].append(v)
+    return (ret,information)
         
 Tension= mood([['tense', 'shaky', 'on-edge', 'panicky', 'uneasy', 'restless', 'nervous', 'anxious'], ['relaxed']], 2, "Tension")
 Depression = mood([['unhappy', 'sorry-for-things-done', 'sad', 'blue', 'hopeless', 'unworthy', 'discouraged', 'lonely', 'miserable', 'gloomy', 'desperate', 'helpless', 'worthless', 'terrified', 'guilty'], []], 2, "Depression")
 Anger = mood([['anger', 'peeved', 'grouchy', 'spiteful', 'annoyed', 'resentful', 'bitter', 'ready-to-fight','rebellious', 'deceived', 'furious', 'bad-tempered'], []], 2, "Anger")
 Vigour = mood([['lively', 'active', 'energetic', 'cheerful', 'alert', 'fell of pep', 'carefree', 'vigorous'], []], 2, "Vigour")
-Fatigue = mood([['worn-out', 'listless', 'fatigued', 'exhausted', 'sluggish', 'weary', 'bushed'], []], 2, "Fatigue")
-Confusion = mood([[ 'confused', 'unable-to-concentrate', 'muddled', 'bewildered', 'forgetful', 'uncertain-about-things'], ['efficient']], 2, "Confusion")
+Fatigue = mood([['worn-out', 'listless', 'fatigued', 'exhausted', 'sluggish', 'weary', 'bushed'], []], 3, "Fatigue")
+Confusion = mood([[ 'confused', 'unable-to-concentrate', 'muddled', 'bewildered', 'forgetful', 'uncertain-about-things'], ['efficient']], 3, "Confusion")
 
 ProfileOfMoods = [Tension, Depression, Anger, Vigour, Fatigue, Confusion]
 words = 0
+final = {}
 for mood in ProfileOfMoods:
     T = moodCalc(mood)
-    print ""
-    words+=len(T[0])+len(T[1])
-    
-print "%s words total" % words
+    (parsed, info) = stripParse(T[0])
+    final[mood.name] = info
 
 
 
-#Tension
-#T = propagate(, 1)
-#Depression
-#T = propagate(, 1)
-#Anger
-#T = propagate(, 1)
-#Vigour
-#T = propagate(, 1)
-#Fatigue
-#T = propagate(, 2)
-#Confusion
+
+
+
+
 
