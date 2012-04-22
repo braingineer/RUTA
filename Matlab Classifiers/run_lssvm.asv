@@ -30,7 +30,7 @@ tsize = 117; % from visual inspection, corresponding to days preceding Dec
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 bestDay = 0;
 bestSmape = 1000;
-dayVals = [];
+dayVals = []
 for i=1:10
     i0 = get_baseline(DJIA,i);
     i0 = scale(i0);
@@ -44,13 +44,11 @@ for i=1:10
         bestDay = i;
     end
     %fprintf('day: %d, mape: %f, smape: %f\n', i, mapeval, smapeval); 
-    dayVals = [dayVals; [mapeval, smapeval]];
+    dayVals(i) = [mapeval, smapeval];
 end
 
 for i=1:10
-    fprintf('day: %d, mape: %f, smape: %f\n', i, dayVals(i,1), dayVals(i,2)); 
 end
-fprintf('best day: %d, mape: %f, smape: %f\n', bestDay, dayVals(bestDay,1), bestSmape); 
 
 % generate model matrices
 %i0  = get_baseline(DJIA, 5);
@@ -62,31 +60,78 @@ fprintf('best day: %d, mape: %f, smape: %f\n', bestDay, dayVals(bestDay,1), best
 % iOF = scale(iOF);
 %iOF_PP = scale(iOF_PP);
 
-bestDay = 0;
-bestAcc = 0;
-dayVals = [];
-for i=1:10
-    i0 = direction_data(get_baseline(DJIA,i));
-    i0 = scale(i0);
-    
-    acc = classEval(i0(1:tsize-1, 2:end-1), i0(1:tsize-1, end), ...
-                i0(tsize:end, 2:end-1), i0(tsize:end, end));
-    
-    if acc > bestAcc
-        bestAcc = acc;
-        bestDay = i;
-    end
-    %fprintf('day: %d, mape: %f, smape: %f\n', i, mapeval, smapeval); 
-    dayVals = [dayVals; acc];
-end
-
-for i=1:10
-    fprintf('day: %d, accuracy: %f\n', i, dayVals(i)); 
-end
-fprintf('best day: %d, accuracy: %f\n', bestDay, dayVals(bestDay)); 
-
 %dir_i0 = direction_data(i0, 4);
 % dir_iOF = direction_data(iOF, 4);
+
+
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% EXACT PREDICTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% BASELINE -- ONLY DJIA DATA
+
+disp(' ');
+disp('DJIA Data only');
+% MAKE MODEL
+type = 'function estimation';
+X = i0(1:tsize-1, 2:end-1);
+Y = i0(1:tsize-1, end);
+testX = i0(tsize:end, 2:end-1);
+testY = i0(tsize:end, end);
+kernel = 'RBF_kernel';
+gam = 2;
+sig2 = .8;
+
+% RUN AND TEST
+model = initlssvm(X,Y,type,gam,sig2,kernel);
+model = trainlssvm(model);
+Yp = simlssvm(model, X);
+disp(' ');
+disp('Training data...');
+fprintf('MAPE: %f SMAPE: %f\n', mape(Yp, Y), smape(Yp, Y));
+plotlssvm(model);
+
+Yp = simlssvm(model, testX);
+disp(' ');
+disp('Testing data...');
+fprintf('MAPE: %f SMAPE: %f\n', mape(Yp, testY), smape(Yp, testY));
+figure;
+plot(1:size(testX,1), testY,'b*');
+hold on;
+plot(1:size(testX,1), Yp,'r');
+
+%% DJIA DATA WITH OF
+
+disp(' ');
+disp('DJIA Data with OF');
+% MAKE MODEL
+type = 'function estimation';
+X = iOF(1:tsize-1, 2:end-1);
+Y = iOF(1:tsize-1, end);
+testX = iOF(tsize:end, 2:end-1);
+testY = iOF(tsize:end, end);
+kernel = 'RBF_kernel';
+gam = 2;
+sig2 = .8;
+
+%RUN AND TEST
+model = initlssvm(X,Y,type,gam,sig2,kernel);
+model = trainlssvm(model);
+Yp = simlssvm(model, X);
+disp(' ');
+disp('Training data...');
+fprintf('MAPE: %f SMAPE: %f\n', mape(Yp, Y), smape(Yp, Y));
+plotlssvm(model);
+
+Yp = simlssvm(model, testX);
+disp(' ');
+disp('Testing data...');
+fprintf('MAPE: %f SMAPE: %f\n', mape(Yp, testY), smape(Yp, testY));
+figure;
+plot(1:size(testX,1), testY,'b*');
+hold on;
+plot(1:size(testX,1), Yp,'r');
 
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -104,6 +149,45 @@ testX = dir_i0(tsize:end, 2:end-1);
 testY = dir_i0(tsize:end, end);
 kernel = 'RBF_kernel';
 gam = 2;
+sig2 = .8;
+
+% RUN AND TEST
+model = initlssvm(X,Y,type,gam,sig2,kernel);
+model = trainlssvm(model);
+Yp = simlssvm(model, X);
+disp(' ');
+disp('Training data...');
+fprintf('Accuracy: %f\n', sum(Yp == Y)/size(Yp,1));
+figure;
+subplot(1,2,1);
+plot(1:size(X,1), Y,'b*');
+hold on;
+plot(1:size(X,1), Yp,'r.');
+ylim([-1 2]);
+%plotlssvm(model);
+
+Yp = simlssvm(model, testX);
+disp(' ');
+disp('Testing data...');
+fprintf('Accuracy: %f\n', sum(Yp == testY)/size(Yp,1));
+subplot(1,2,2);
+plot(1:size(testX,1), testY,'b*');
+hold on;
+plot(1:size(testX,1), Yp,'r.');
+ylim([-1 2]);
+
+%% DJIA DATA W/ UNPROCESSED OF
+
+disp(' ');
+disp('Direction testing w/ DJIA & OF data');
+
+type = 'classification';
+X = dir_iOF(1:tsize-1, 2:end-1);
+Y = dir_iOF(1:tsize-1, end);
+testX = dir_iOF(tsize:end, 2:end-1);
+testY = dir_iOF(tsize:end, end);
+kernel = 'RBF_kernel';
+gam = 10;
 sig2 = .8;
 
 % RUN AND TEST
